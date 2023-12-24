@@ -10,15 +10,15 @@ add_tag = False
 
 # 是否启动 debug 模式
 # 如果启动, 那么每一个查找到的需要修改的文件, 都能够手动控制是否修改
-debug = True
+debug = False
 
 # 储存操作日志的位置
 # 必填
-change_info_path = ''
+change_info_path = '/home/moonkyandoru/Documents/loger.dat'
 
 # 数据库的路径
 # 必填
-_folder_path = ''
+_folder_path = '/media/moonkyandoru/Voice'
 
 error = []
 
@@ -71,9 +71,6 @@ def delete(_folder_path):
             shutil.rmtree(os.path.join(_folder_path, filename))
             continue
 
-        if os.path.isdir(os.path.join(_folder_path, filename)):
-            delete(os.path.join(_folder_path, filename))
-
 
 # 处理键盘输入
 def check(_idx):
@@ -88,11 +85,13 @@ def check(_idx):
 # 寻找子目录是否存在 idx 标签
 def find_idx_at_next_path(filepath):
     if not os.path.isdir(filepath):
-        return True
+        return None
 
     idx = ''
     for _i in os.listdir(filepath):
-        if (_i[:2] == 'RJ' or _i[:2] == 'VJ') and os.path.isdir(os.path.join(filepath, _i)):
+        _i_path = os.path.join(filepath, _i)
+        if (_i[:2] == 'RJ' or _i[:2] == 'VJ') and ('.' not in _i) \
+                and (not os.path.isdir(_i_path)):
             idx = _i
     if idx != '':
         return idx
@@ -100,9 +99,22 @@ def find_idx_at_next_path(filepath):
 
 
 class error_item_info:
-    def __init__(self, _idx, _path):
-        self.idx = _idx
+    def __init__(self, _idx, _path, _name):
+        self._idx = _idx
         self._path = _path
+        self._name = _name
+
+    def display(self):
+        return str(self._idx)
+
+    def get_idx(self):
+        return self._idx
+
+    def get_path(self):
+        return self._path
+
+    def get_name(self):
+        return self._name
 
 
 # 返回 'RJXXXXXX' | 'VJXXXXXX' 的 name, tag, cv
@@ -115,41 +127,67 @@ def get_info(_idx):
         response.encoding = 'utf-8'
         html = response.text
         soup = BeautifulSoup(html, features='html.parser')
-
     except requests.Timeout:
         print('get info', _idx, 'error')
         return None
+    except requests.exceptions.SSLError:
+        print('has no network !!')
+        check('NULL')
+        return None
 
-    # 从网页获取 name
-    company_item = soup.find('h1', id='work_name')
-    name = company_item.text.strip()
-    name = to_accept_name(name)
+    try:
+        # 从网页获取 name
+        company_item = soup.find('h1', id='work_name')
+        name = company_item.text.strip()
+        name = to_accept_name(name)
+    except AttributeError:
+        print('get info', _idx, 'name error')
+        return None
 
-    # 从网页获取 tag
-    company_item = soup.find('div', class_="main_genre")
-    res = company_item.text.strip().split('\n')
-    tag = []
-    for _i in res:
-        _i = to_accept_name(_i)
-        for j in _i.split('/'):
-            tag.append(j)
+    try:
+        # 从网页获取 tag
+        company_item = soup.find('div', class_="main_genre")
+        res = company_item.text.strip().split('\n')
+        tag = []
+        for _i in res:
+            _i = to_accept_name(_i)
+            for j in _i.split('/'):
+                tag.append(j)
+    except AttributeError:
+        print('get info', _idx, 'tag error')
+        return None
 
-    # 从网页获取 cv
-    cv = []
-    company_item = soup.find('table', id='work_outline').text.split('\n')
-    flag = 0
-    for _i in company_item:
-        for j in _i.split(' '):
-            company_item.append(j)
-            if j == '音楽' or j == '年齢指定':
-                flag = 2
+    # 判断 CV 逻辑
+    def __check_cv(_name):
+        if _name == '声優':
+            return 1
+        if _name == '販売日' or _name == 'シリーズ名' or _name == '作者' \
+                or _name == 'シナリオ' or _name == 'イラスト' or _name == '年齢指定' \
+                or _name == '作品形式' or _name == 'ファイル形式' or _name == 'ジャンル' \
+                or _name == 'ファイル容量':
+            return -1
+        return 0
+
+    try:
+        # 从网页获取 cv
+        cv = []
+        company_item = soup.find('table', id='work_outline').text.split('\n')
+        flag = 0
+        for _i in company_item:
+            for j in _i.split(' '):
+                _temp = __check_cv(j)
+                if flag == 1 and _temp < 0:
+                    flag = 2
+                    break
+                if flag == 1 and len(j) > 0:
+                    cv.append(j)
+                if _temp > 0:
+                    flag = 1
+            if flag > 1:
                 break
-            if flag == 1 and len(j) > 1:
-                cv.append(j)
-            if j == '声優':
-                flag = 1
-        if flag > 1:
-            break
+    except AttributeError:
+        print('get info', _idx, 'cv error')
+        return None
 
     print('get info', _idx, 'success')
     return name, tag, cv
@@ -163,28 +201,33 @@ def change_info(_folder_path, _idx, _filename=None):
         _info = 'change info ' + _idx + '\n'
         if debug and (not check(_idx)):
             return
-        name, tag, CV = get_info(_idx)
+        _all_info = get_info(_idx)
+        if _all_info is None:
+            error.append({error_item_info(_idx=_idx, _path=_folder_path, _name=_filename)})
+            return
+        name, tag, CV = _all_info
     except ValueError:
         print('set', _filename, 'error')
-        error.append(_filename)
+        error.append({error_item_info(_idx=_idx, _path=_folder_path, _name=_filename)})
         return
 
     # 修改文件名(如果需要的话)
     old_filepath = str(os.path.join(_folder_path, _idx))
     new_filepath = str(os.path.join(_folder_path, name))
 
-    if os.path.exists(new_filepath):
-        print(new_filepath, 'was exists')
-        error.append(error_item_info(_idx=_idx, _path=_folder_path))
-        return
-    if not os.path.exists(old_filepath):
-        print(old_filepath, 'can\'t find')
-        error.append(error_item_info(_idx=_idx, _path=_folder_path))
-        return
-
+    # 重建索引
     if _filename is None:
-        shutil.move(old_filepath, new_filepath)
-        _info = _info + 'change ' + _idx + ' to ' + name + '\n'
+        # 处理已经存在的文件
+        if os.path.exists(new_filepath):
+            print(new_filepath, 'was exists')
+            error.append({error_item_info(_idx=_idx, _path=_folder_path, _name=_filename)})
+            return
+        try:
+            shutil.move(old_filepath, new_filepath)
+            _info = _info + 'change ' + _idx + ' to ' + name + '\n'
+        except shutil.Error:
+            print(old_filepath, 'can\'t find or', new_filepath, 'was  ')
+            error.append({error_item_info(_idx=_idx, _path=_folder_path, _name=_filename)})
     else:
         new_filepath = str(os.path.join(_folder_path, _filename))
 
@@ -201,18 +244,20 @@ def change_info(_folder_path, _idx, _filename=None):
     # 添加 tag
     _info = _info + _idx + ' add tag ' + str(tag) + '\n'
     for _i in tag:
-        label_path = str(os.path.join(_tag_dir, _i))
+        _tag_name = to_accept_name(_i)
+        label_path = str(os.path.join(_tag_dir, _tag_name))
         file = open(label_path, 'w')
         file.close()
 
     # 创建 cv 文件夹
-    _cv_dir = os.path.join(new_filepath, 'cv')
+    _cv_dir = str(os.path.join(new_filepath, 'cv'))
     if not os.path.exists(_cv_dir):
         os.mkdir(_cv_dir)
     # 添加 cv
     _info = _info + _idx + ' add cv ' + str(CV) + '\n\n'
     for _i in CV:
-        label_path = os.path.join(_tag_dir, _i)
+        _cv_name = to_accept_name(_i)
+        label_path = os.path.join(_cv_dir, _cv_name)
         file = open(label_path, 'w')
         file.close()
 
@@ -226,18 +271,22 @@ def get_url(_folder_path):
         if is_special_file(filename):
             continue
 
-        # 通常情况
+        # 通常情况, 编号就是路径名
         if (filename[:2] == 'RJ' or filename[:2] == 'VJ') and os.path.isdir(os.path.join(_folder_path, filename)):
-            change_info(_folder_path=_folder_path, _idx=filename,)
+            change_info(_folder_path=_folder_path, _idx=filename)
             continue
 
         # 如果有子目录 或者 需要添加更多标签
         _son_folder_path = os.path.join(_folder_path, filename)
-        flag = None
+        _flag = None
         if add_tag:
-            flag = find_idx_at_next_path(_son_folder_path)
-        if flag is not None:
-            change_info(_folder_path=_folder_path, _filename=filename, _idx=flag)
+            _flag = find_idx_at_next_path(_son_folder_path)
+        if _flag is not None:
+            # 清除子节点已经添加的所有标签
+            delete(_son_folder_path)
+
+            # 重新填写标签
+            change_info(_folder_path=_folder_path, _filename=filename, _idx=_flag)
             continue
         if os.path.isdir(_son_folder_path):
             get_url(_son_folder_path)
@@ -246,12 +295,20 @@ def get_url(_folder_path):
 if '__main__' == __name__:
     while True:
         get_url(_folder_path)
-        for i in error:
-            print(i, end=', ')
-        print()
         if len(error) == 0:
             break
+
+        for _i in error:
+            print(_i.display(), end=', ')
+        print()
         a = input('restart ? [y/n]')
-        error = []
         if a[0] == 'n':
             break
+
+        t = error
+        error = []
+        for _i in t:
+            _idx = _i.get_idx()
+            _name = _i.get_name()
+            _path = _i.get_path()
+            change_info(_folder_path=_path, _idx=_idx, _filename=_name)
