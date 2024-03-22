@@ -228,8 +228,6 @@ def get(folder_path):
         i += 1
         if i % 10 == 0:
             print('')
-        if i >= 10:
-            return None
 
 
 if __name__ == '__main__':
