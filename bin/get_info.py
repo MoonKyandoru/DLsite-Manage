@@ -38,11 +38,11 @@ WorkFormat = "作品形式"
 
 # 获取信息, 在目录下输出 log (不论成功与否) 然后返回 'RJXXXXXX' | 'VJXXXXXX' 的 作品名称, Tag, CV, 系列(如果存在的话), 社团名称; 失败则返回 None
 def get_info(idx):
-    print(idx, end=', ')
     cursor.execute("select dlsite.id from dlsite where dlsite.id='%s'" % idx)
     output = cursor.fetchone()
     if output is not None:
-        print(', (%s)' % idx)
+        # 已经存在的作品, 非特殊输出格式
+        print('%s' % idx, end=',')
         return None
 
     soup = None
@@ -69,8 +69,15 @@ def get_info(idx):
 
     company_item = soup.find('div', class_="error_box_inner")
     if company_item is not None:
-        print('\n' + idx + ':この作品は現在販売されていません\n')
+        # 没有被贩卖的作品, 或者属于别的分区
+        print('\033[1;37;40m\033[37m%s\033[0m\033[0m' % idx, end=',')
         return None
+    else:
+        # 这次运行过程中, 自动寻找的作品
+        print('\033[4;36m%s\033[0m' % idx, end=', ')
+
+    main_table = soup.find('div', id='work_right_inner')
+
 
     temp = etree.HTML(html).xpath('//span[@class="maker_name"]/a')[0].xpath('string(.)')
     info = {'idx': idx, 'name': soup.find('h1', id='work_name').text, 'url': url,
@@ -237,6 +244,6 @@ def get(folder_path):
 
 
 if __name__ == '__main__':
-    get_info('RJ01000139')
+    get_info('RJ307506')
     cursor.close()
     db.close()
