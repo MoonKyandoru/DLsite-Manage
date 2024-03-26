@@ -29,3 +29,8 @@ first: 是否为第一次运行的判断
   "first": false
 ### 0x02 运行:
 `get_tag.py`
+
+
+### 0x03 特殊形式的作品
+1. 同人音声
+2. 所有 `電撃G's magazine` 公司的作品
