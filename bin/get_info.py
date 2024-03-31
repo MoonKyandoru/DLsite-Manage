@@ -76,9 +76,6 @@ def get_info(idx):
         # 这次运行过程中, 自动寻找的作品
         print('\033[4;36m%s\033[0m' % idx, end=', ')
 
-    main_table = soup.find('div', id='work_right_inner')
-
-
     temp = etree.HTML(html).xpath('//span[@class="maker_name"]/a')[0].xpath('string(.)')
     info = {'idx': idx, 'name': soup.find('h1', id='work_name').text, 'url': url,
             Societies: temp}
