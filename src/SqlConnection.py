@@ -1,37 +1,43 @@
-import json
 import MySQLdb
 from src import Global
 
-# SQL 处理器
+
 class SqlConnection:
-    def __init__(self):
-        print('Initialize mysql ...')
-        with open('SQL/dlsite.sql', 'r', encoding='utf-8') as f:
-            createDataBase = f.read()
-        self.commit(createDataBase)
+    def __init__(self, config):
+        try:
+            print("Connect to the database ...")
+            dataBase = MySQLdb.connect(
+                host=config['host'],
+                port=config['port'],
+                user=config['user'],
+                passwd=config['passwd'],
+                charset='utf8')
+            Global.set_value('DataBase', dataBase)
+            print("Database connection successful")
+        except MySQLdb.Error as e:
+            print("mysql connection error, detailed error report is as follows:")
+            print({e})
+        try:
+            print("Initialize database ...")
+            with open('SQL/dlsite.sql', 'r', encoding='utf-8') as f:
+                createDataBase = f.read()
+            self.commit(createDataBase)
+            print("Initialize database success")
+        except MySQLdb.Error as e:
+            print("Initialize database error, detailed error report is as follows:")
+            print({e})
 
     def commit(self, script: str):
-        print('try to commit sql script ...')
         try:
-            cursor = Global.get_value('dataBase').cursor()
+            cursor = Global.get_value('DataBase').cursor()
             for statement in script.split(';'):
-                if statement.strip():  # 忽略空语句
+                if statement.strip():
                     cursor.execute(statement)
-
-            # 提交更改
-            info = Global.get_value('dataBase').commit()
-            print("SQL script executed successfully.")
-            print(info)
+            Global.get_value('DataBase').commit()
 
         except MySQLdb.Error as e:
             print(f"Error executing SQL script: {e}")
-            # 如果出错，回滚更改
-            Global.get_value('dataBase').rollback()
-
+            Global.get_value('DataBase').rollback()
         finally:
-            # 关闭游标和连接
             cursor.close()
-            Global.get_value('dataBase').close()
-
-    def get(self):
-        return Global.get_value('dataBase')
+            Global.get_value('DataBase').close()

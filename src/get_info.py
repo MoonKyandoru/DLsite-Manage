@@ -1,11 +1,9 @@
 # Web 处理器
-import json
-import os
+
 import re
 import requests
 import MySQLdb
 from bs4 import BeautifulSoup
-from datetime import datetime
 from lxml import etree
 from src import Global
 
@@ -27,20 +25,12 @@ Music = "音楽"
 AgeSpecification = "年齢指定"
 FileCapacity = "ファイル容量"
 WorkFormat = "作品形式"
-
-
-# 获取信息, 在目录下输出 log (不论成功与否) 然后返回 'RJXXXXXX' | 'VJXXXXXX' 的 作品名称, Tag, CV, 系列(如果存在的话), 社团名称; 失败则返回 None
-def get_info(idx):
-    cursor.execute("select dlsite.id from dlsite where dlsite.id='%s'" % idx)
-    output = cursor.fetchone()
-    if output is not None:
-        # 已经存在的作品, 非特殊输出格式
-        print('%s' % idx, end=',')
-        return None
-
+header = ['https://www.dlsite.com/maniax/work/=/product_id/']
+def from_net_get(idx):
     soup = None
     html = None
-    url = 'https://www.dlsite.com/maniax/work/=/product_id/' + idx + '.html'
+    global header, url
+    url = header[0] + idx + '.html'
 
     # 开始获取 尝试三次访问, 超时设定4秒
 
@@ -154,7 +144,42 @@ def get_info(idx):
     if Societies not in info.keys():
         info[Societies] = None
 
+
+# 获取信息, 在目录下输出 log (不论成功与否) 然后返回 'RJXXXXXX' | 'VJXXXXXX' 的 作品名称, Tag, CV, 系列(如果存在的话), 社团名称; 失败则返回 None
+def get_info(idx):
+    cursor.execute("select dlsite.id from dlsite where dlsite.id='%s'" % idx)
+    output = cursor.fetchone()
+    if output is not None:
+        # 已经存在的作品, 非特殊输出格式
+        print('%s' % idx, end=',')
+        return None
+
+    from_net_get(idx)
+
     try:
+        global info
+        cursor.execute("insert into dlsite (ID) value (%s) ON DUPLICATE KEY UPDATE ID=ID;", (info['idx'],))
+
+        update_data = [
+            ('URL', url),
+            ('Name', info['name']),
+            ('SellDay', info[SellDay]),
+            ('SeriesName', info[SeriesName]),
+            ('Author', info[Author]),
+            ('Scenario', info[Scenario]),
+            ('Illustration', info[Illustration]),
+            ('Music', info[Music]),
+            ('AgeSpecification', info[AgeSpecification]),
+            ('WorkFormat', info[WorkFormat]),
+            ('FileCapacity', info[FileCapacity]),
+            ('Societies', info[Societies])
+        ]
+        update_query = "update dlsite set {} WHERE ID=%s;".format(
+            ', '.join([f"{col}=%s" for col, val in update_data if val is not None])
+        )
+        print(update_query)
+        # cursor.execute(update_query, tuple(val for col, val in update_data if val is not None) + (info['idx'],))
+
         cursor.execute("insert into dlsite (ID) value ('" + info['idx'] + "');")
         cursor.execute("update dlsite set %s='%s' WHERE ID='%s';" % ('URL', url, info['idx']))
         if info['name'] is not None:
@@ -193,40 +218,7 @@ def get_info(idx):
         Global.get_value('dataBase').rollback()  # 发生错误时回滚
 
     # 输出日志
-    datetime_now = str(datetime.now())
-    with open(config['data_path'] + '/logger.data', 'a', encoding='utf-8') as file:
-        logger = datetime_now + ':' + idx + '\n'
-        file.write(logger)
-
-
-# 确认传入的路径合法, 或是否是自己能够操作的文件
-def is_special_file(filename):
-    if filename == 'Temp':
-        return True
-    if filename[0] == '$':
-        return True
-    if filename == 'list':
-        return True
-    if filename == 'Special':
-        return True
-    if filename == 'System Volume Information':
-        return True
-    if filename[0] == '.':
-        return True
-    if filename == 'bootTel.dat':
-        return True
-    return False
-
-
-# 遍历文件夹 寻找需要添加 tag 的未定义目录
-def get(folder_path):
-    print('扫描 ' + folder_path + ' 中')
-
-    i = 0
-    for filename in os.listdir(folder_path):
-        if is_special_file(filename):
-            continue
-        get_info(filename)
-        i += 1
-        if i % 10 == 0:
-            print('')
+    # datetime_now = str(datetime.now())
+    # with open(config['data_path'] + '/logger.data', 'a', encoding='utf-8') as file:
+    #     logger = datetime_now + ':' + idx + '\n'
+    #     file.write(logger)
