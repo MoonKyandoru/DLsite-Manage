@@ -1,4 +1,4 @@
-# 获取已经下载的音声相关信息
+# Web 处理器
 import json
 import os
 import re
@@ -7,22 +7,15 @@ import MySQLdb
 from bs4 import BeautifulSoup
 from datetime import datetime
 from lxml import etree
+from src import Global
 
-# 输出日志
 data_success = 'success.log'
 data_error = 'error.log'
 data = 'data.json'
-if '__main__' == __name__:
-    configName = '../config.json'
-else:
-    configName = 'config.json'
-with open(configName, 'r', encoding='utf-8') as f:
-    config = json.loads(f.read())
-db = MySQLdb.connect(host=config['host'], port=config['port'], user=config['user'], db=config['db'],
-                     passwd=config['passwd'],
-                     charset='utf8')
-cursor = db.cursor()
-cursor.execute("use " + config['db'])
+
+cursor = Global.get_value('DataBaseName').cursor()
+dbName = Global.get_value('DataBaseName')
+cursor.execute("use " + dbName)
 
 SellDay = '販売日'
 SeriesName = 'シリーズ名'
@@ -195,9 +188,9 @@ def get_info(idx):
         if 'ジャンル' in info.keys():
             for i in info['ジャンル']:
                 cursor.execute("insert into tag value('%s', '%s')" % (info['idx'], i))
-        db.commit()
+        Global.get_value('dataBase').commit()
     except MySQLdb.connections.Error:
-        db.rollback()  # 发生错误时回滚
+        Global.get_value('dataBase').rollback()  # 发生错误时回滚
 
     # 输出日志
     datetime_now = str(datetime.now())
@@ -237,10 +230,3 @@ def get(folder_path):
         i += 1
         if i % 10 == 0:
             print('')
-
-
-
-if __name__ == '__main__':
-    get_info('RJ307506')
-    cursor.close()
-    db.close()

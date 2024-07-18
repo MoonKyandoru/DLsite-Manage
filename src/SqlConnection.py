@@ -1,45 +1,37 @@
 import json
 import MySQLdb
+from src import Global
 
-
+# SQL 处理器
 class SqlConnection:
-    def createDataBase(self):
+    def __init__(self):
         print('Initialize mysql ...')
-        with open('config.json', 'r', encoding='utf-8') as f:
-            config = json.loads(f.read())
-        dataBase = MySQLdb.connect(
-            host=config['host'],
-            port=config['port'],
-            user=config['user'],
-            passwd=config['passwd'],
-            charset='utf8')
-        cursor = dataBase.cursor()
-
         with open('SQL/dlsite.sql', 'r', encoding='utf-8') as f:
             createDataBase = f.read()
+        self.commit(createDataBase)
 
+    def commit(self, script: str):
+        print('try to commit sql script ...')
         try:
-            for statement in createDataBase.split(';'):
+            cursor = Global.get_value('dataBase').cursor()
+            for statement in script.split(';'):
                 if statement.strip():  # 忽略空语句
                     cursor.execute(statement)
 
             # 提交更改
-            dataBase.commit()
+            info = Global.get_value('dataBase').commit()
             print("SQL script executed successfully.")
+            print(info)
 
         except MySQLdb.Error as e:
             print(f"Error executing SQL script: {e}")
             # 如果出错，回滚更改
-            dataBase.rollback()
+            Global.get_value('dataBase').rollback()
 
         finally:
             # 关闭游标和连接
             cursor.close()
-            dataBase.close()
+            Global.get_value('dataBase').close()
 
-    def __init__(self):
-        self.createDataBase()
-
-
-if '__main__' == __name__:
-    DataBase = SqlConnection()
+    def get(self):
+        return Global.get_value('dataBase')

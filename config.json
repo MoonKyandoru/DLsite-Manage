@@ -1,10 +1,7 @@
 {
   "host": "127.0.0.1",
   "port": 3306,
-  "user": "",
-  "passwd": "",
-  "db": "DLsite",
-  "manager_path": "",
-  "data_path": "logger",
-  "first": false
+  "user": "root",
+  "passwd": "xhcxg",
+  "DataBaseName": "DLsite"
 }
