@@ -11,10 +11,6 @@ data_success = 'success.log'
 data_error = 'error.log'
 data = 'data.json'
 
-cursor = Global.get_value('DataBaseName').cursor()
-dbName = Global.get_value('DataBaseName')
-cursor.execute("use " + dbName)
-
 SellDay = '販売日'
 SeriesName = 'シリーズ名'
 Author = '作者'
@@ -26,11 +22,13 @@ AgeSpecification = "年齢指定"
 FileCapacity = "ファイル容量"
 WorkFormat = "作品形式"
 header = ['https://www.dlsite.com/maniax/work/=/product_id/']
-def from_net_get(idx):
+
+
+def from_net_get(FileName):
     soup = None
     html = None
     global header, url
-    url = header[0] + idx + '.html'
+    url = header[0] + FileName + '.html'
 
     # 开始获取 尝试三次访问, 超时设定4秒
 
@@ -47,20 +45,20 @@ def from_net_get(idx):
             print('no network !!')
             return None
         if _i == 2:
-            print('get info', idx, 'error')
+            print('get info', FileName, 'error')
             return None
 
     company_item = soup.find('div', class_="error_box_inner")
     if company_item is not None:
         # 没有被贩卖的作品, 或者属于别的分区
-        print('\033[1;37;40m\033[37m%s\033[0m\033[0m' % idx, end=',')
+        print('\033[1;37;40m\033[37m%s\033[0m\033[0m' % FileName, end=',')
         return None
     else:
         # 这次运行过程中, 自动寻找的作品
-        print('\033[4;36m%s\033[0m' % idx, end=', ')
+        print('\033[4;36m%s\033[0m' % FileName, end=', ')
 
     temp = etree.HTML(html).xpath('//span[@class="maker_name"]/a')[0].xpath('string(.)')
-    info = {'idx': idx, 'name': soup.find('h1', id='work_name').text, 'url': url,
+    info = {'idx': FileName, 'name': soup.find('h1', id='work_name').text, 'url': url,
             Societies: temp}
     # 遍历所有<a>以及<div>，将其替换为<span>
 
@@ -145,75 +143,71 @@ def from_net_get(idx):
         info[Societies] = None
 
 
-# 获取信息, 在目录下输出 log (不论成功与否) 然后返回 'RJXXXXXX' | 'VJXXXXXX' 的 作品名称, Tag, CV, 系列(如果存在的话), 社团名称; 失败则返回 None
 def get_info(idx):
-    cursor.execute("select dlsite.id from dlsite where dlsite.id='%s'" % idx)
-    output = cursor.fetchone()
-    if output is not None:
+    if Global.get_value('SqlConnection').search(idx):
         # 已经存在的作品, 非特殊输出格式
         print('%s' % idx, end=',')
         return None
 
     from_net_get(idx)
-
+    global info
+    update_data = [
+        ('URL', url),
+        ('Name', info['name']),
+        ('SellDay', info[SellDay]),
+        ('SeriesName', info[SeriesName]),
+        ('Author', info[Author]),
+        ('Scenario', info[Scenario]),
+        ('Illustration', info[Illustration]),
+        ('Music', info[Music]),
+        ('AgeSpecification', info[AgeSpecification]),
+        ('WorkFormat', info[WorkFormat]),
+        ('FileCapacity', info[FileCapacity]),
+        ('Societies', info[Societies])
+    ]
+    update_query = "update dlsite set {} WHERE ID=%s;".format(
+        ', '.join([f"{col}=%s" for col, val in update_data if val is not None])
+    )
+    print(update_query)
     try:
-        global info
-        cursor.execute("insert into dlsite (ID) value (%s) ON DUPLICATE KEY UPDATE ID=ID;", (info['idx'],))
-
-        update_data = [
-            ('URL', url),
-            ('Name', info['name']),
-            ('SellDay', info[SellDay]),
-            ('SeriesName', info[SeriesName]),
-            ('Author', info[Author]),
-            ('Scenario', info[Scenario]),
-            ('Illustration', info[Illustration]),
-            ('Music', info[Music]),
-            ('AgeSpecification', info[AgeSpecification]),
-            ('WorkFormat', info[WorkFormat]),
-            ('FileCapacity', info[FileCapacity]),
-            ('Societies', info[Societies])
-        ]
-        update_query = "update dlsite set {} WHERE ID=%s;".format(
-            ', '.join([f"{col}=%s" for col, val in update_data if val is not None])
-        )
-        print(update_query)
+        pass
+        #
         # cursor.execute(update_query, tuple(val for col, val in update_data if val is not None) + (info['idx'],))
-
-        cursor.execute("insert into dlsite (ID) value ('" + info['idx'] + "');")
-        cursor.execute("update dlsite set %s='%s' WHERE ID='%s';" % ('URL', url, info['idx']))
-        if info['name'] is not None:
-            cursor.execute("update dlsite set %s='%s' WHERE ID='%s';" % ('Name', info['name'], info['idx']))
-        if info[SellDay] is not None:
-            cursor.execute("update dlsite set %s='%s' WHERE ID='%s';" % ('SellDay', info[SellDay], info['idx']))
-        if info[SeriesName] is not None:
-            cursor.execute("update dlsite set %s='%s' WHERE ID='%s';" % ('SeriesName', info[SeriesName], info['idx']))
-        if info[Author] is not None:
-            cursor.execute("update dlsite set %s='%s' WHERE ID='%s';" % ('Author', info[Author], info['idx']))
-        if info[Scenario] is not None:
-            cursor.execute("update dlsite set %s='%s' WHERE ID='%s';" % ('Scenario', info[Scenario], info['idx']))
-        if info[Illustration] is not None:
-            cursor.execute(
-                "update dlsite set %s='%s' WHERE ID='%s';" % ('Illustration', info[Illustration], info['idx']))
-        if info[Music] is not None:
-            cursor.execute("update dlsite set %s='%s' WHERE ID='%s';" % ('Music', info[Music], info['idx']))
-        if info[AgeSpecification] is not None:
-            cursor.execute(
-                "update dlsite set %s='%s' WHERE ID='%s';" % ('AgeSpecification', info[AgeSpecification], info['idx']))
-        if info[WorkFormat] is not None:
-            cursor.execute("update dlsite set %s='%s' WHERE ID='%s';" % ('WorkFormat', info[WorkFormat], info['idx']))
-        if info[FileCapacity] is not None:
-            cursor.execute(
-                "update dlsite set %s='%s' WHERE ID='%s';" % ('FileCapacity', info[FileCapacity], info['idx']))
-        if info[Societies] is not None:
-            cursor.execute("update dlsite set %s='%s' WHERE ID='%s';" % ('Societies', info[Societies], info['idx']))
-        if '声優' in info.keys():
-            for i in info['声優']:
-                cursor.execute("insert into cv value('%s', '%s')" % (info['idx'], i))
-        if 'ジャンル' in info.keys():
-            for i in info['ジャンル']:
-                cursor.execute("insert into tag value('%s', '%s')" % (info['idx'], i))
-        Global.get_value('dataBase').commit()
+        #
+        # cursor.execute("insert into dlsite (ID) value ('" + info['idx'] + "');")
+        # cursor.execute("update dlsite set %s='%s' WHERE ID='%s';" % ('URL', url, info['idx']))
+        # if info['name'] is not None:
+        #     cursor.execute("update dlsite set %s='%s' WHERE ID='%s';" % ('Name', info['name'], info['idx']))
+        # if info[SellDay] is not None:
+        #     cursor.execute("update dlsite set %s='%s' WHERE ID='%s';" % ('SellDay', info[SellDay], info['idx']))
+        # if info[SeriesName] is not None:
+        #     cursor.execute("update dlsite set %s='%s' WHERE ID='%s';" % ('SeriesName', info[SeriesName], info['idx']))
+        # if info[Author] is not None:
+        #     cursor.execute("update dlsite set %s='%s' WHERE ID='%s';" % ('Author', info[Author], info['idx']))
+        # if info[Scenario] is not None:
+        #     cursor.execute("update dlsite set %s='%s' WHERE ID='%s';" % ('Scenario', info[Scenario], info['idx']))
+        # if info[Illustration] is not None:
+        #     cursor.execute(
+        #         "update dlsite set %s='%s' WHERE ID='%s';" % ('Illustration', info[Illustration], info['idx']))
+        # if info[Music] is not None:
+        #     cursor.execute("update dlsite set %s='%s' WHERE ID='%s';" % ('Music', info[Music], info['idx']))
+        # if info[AgeSpecification] is not None:
+        #     cursor.execute(
+        #         "update dlsite set %s='%s' WHERE ID='%s';" % ('AgeSpecification', info[AgeSpecification], info['idx']))
+        # if info[WorkFormat] is not None:
+        #     cursor.execute("update dlsite set %s='%s' WHERE ID='%s';" % ('WorkFormat', info[WorkFormat], info['idx']))
+        # if info[FileCapacity] is not None:
+        #     cursor.execute(
+        #         "update dlsite set %s='%s' WHERE ID='%s';" % ('FileCapacity', info[FileCapacity], info['idx']))
+        # if info[Societies] is not None:
+        #     cursor.execute("update dlsite set %s='%s' WHERE ID='%s';" % ('Societies', info[Societies], info['idx']))
+        # if '声優' in info.keys():
+        #     for i in info['声優']:
+        #         cursor.execute("insert into cv value('%s', '%s')" % (info['idx'], i))
+        # if 'ジャンル' in info.keys():
+        #     for i in info['ジャンル']:
+        #         cursor.execute("insert into tag value('%s', '%s')" % (info['idx'], i))
+        # Global.get_value('dataBase').commit()
     except MySQLdb.connections.Error:
         Global.get_value('dataBase').rollback()  # 发生错误时回滚
 

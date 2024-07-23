@@ -5,14 +5,14 @@ CREATE DATABASE IF NOT EXISTS dlsite CHARACTER SET utf8mb4 COLLATE utf8mb4_unico
 CREATE TABLE IF NOT EXISTS dlsite.cv (
     ID VARCHAR(15) NOT NULL,
     cv VARCHAR(32) NOT NULL,
-    PRIMARY KEY (ID)
+    PRIMARY KEY (ID, cv)
 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- 创建 tag 表, 用来存储作品的 tag
 CREATE TABLE IF NOT EXISTS dlsite.tag (
     ID VARCHAR(15) NOT NULL,
     tag VARCHAR(32) NOT NULL,
-    PRIMARY KEY (ID)
+    PRIMARY KEY (ID, tag)
 ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 -- 创建 dlsite 表, 用来存储作品的相关信息

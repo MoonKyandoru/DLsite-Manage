@@ -6,13 +6,12 @@ class SqlConnection:
     def __init__(self, config):
         try:
             print("Connect to the database ...")
-            dataBase = MySQLdb.connect(
+            self.dataBase = MySQLdb.connect(
                 host=config['host'],
                 port=config['port'],
                 user=config['user'],
                 passwd=config['passwd'],
                 charset='utf8')
-            Global.set_value('DataBase', dataBase)
             print("Database connection successful")
         except MySQLdb.Error as e:
             print("mysql connection error, detailed error report is as follows:")
@@ -26,18 +25,30 @@ class SqlConnection:
         except MySQLdb.Error as e:
             print("Initialize database error, detailed error report is as follows:")
             print({e})
-
+        self.search("RJ273058")
     def commit(self, script: str):
         try:
-            cursor = Global.get_value('DataBase').cursor()
+            cursor = self.dataBase.cursor()
             for statement in script.split(';'):
                 if statement.strip():
                     cursor.execute(statement)
-            Global.get_value('DataBase').commit()
+            self.dataBase.commit()
 
         except MySQLdb.Error as e:
             print(f"Error executing SQL script: {e}")
-            Global.get_value('DataBase').rollback()
+            self.dataBase.rollback()
         finally:
             cursor.close()
-            Global.get_value('DataBase').close()
+
+
+    def search(self, name: str):
+        try:
+            cursor = self.dataBase.cursor()
+            cursor.execute("SELECT id FROM dlsite.dlsite WHERE id = %s", (name,))
+            output = cursor.fetchone()
+        except MySQLdb.Error as e:
+            print({e})
+            return
+        if output is None:
+            return False
+        return True
