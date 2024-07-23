@@ -18,11 +18,6 @@ _global_dict = {}
 with open('config.json', 'r', encoding='utf-8') as f:
     config = json.loads(f.read())
 for i in config:
-    # template = input("please input {0}, defult={1}, blank to select default :".format(i, config[i]))
-    # if template != '':
-    #     set_value(i, config[i])
-    # else:
-    #     set_value(i, template)
     set_value(i, config[i])
 sql = SqlConnection(config)
 set_value('SqlConnection', sql)

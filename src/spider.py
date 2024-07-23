@@ -16,4 +16,8 @@ def get(folder_path):
     for filename in os.listdir(folder_path):
         if is_special_file(filename):
             works.append(filename)
+    works.sort()
     Global.set_value("FileList", works)
+
+
+get(Global.get_value('RootPath'))

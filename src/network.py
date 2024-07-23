@@ -7,10 +7,6 @@ from bs4 import BeautifulSoup
 from lxml import etree
 from src import Global
 
-data_success = 'success.log'
-data_error = 'error.log'
-data = 'data.json'
-
 SellDay = '販売日'
 SeriesName = 'シリーズ名'
 Author = '作者'
@@ -21,20 +17,127 @@ Music = "音楽"
 AgeSpecification = "年齢指定"
 FileCapacity = "ファイル容量"
 WorkFormat = "作品形式"
-header = ['https://www.dlsite.com/maniax/work/=/product_id/']
+headers = ['https://www.dlsite.com/maniax/work/=/product_id/{0}.html']
 
 
-def from_net_get(FileName):
-    soup = None
-    html = None
-    global header, url
-    url = header[0] + FileName + '.html'
+def checkSeriesName(info):
+    if SeriesName not in info.keys():
+        info[SeriesName] = None
+    else:
+        info[SeriesName] = info[SeriesName][0]
 
-    # 开始获取 尝试三次访问, 超时设定4秒
 
-    for _i in range(3):
+def checkSellDay(info):
+    if SellDay not in info.keys():
+        info[SellDay] = None
+    else:
+        info[SellDay] = re.sub(r'[^0-9]', '', info[SellDay][0])
+
+
+def checkAuthor(info):
+    if Author not in info.keys():
+        info[Author] = None
+    else:
+        info[Author] = info[Author][0]
+
+
+def checkScenario(info):
+    if Scenario not in info.keys():
+        info[Scenario] = None
+    else:
+        info[Scenario] = info[Scenario][0]
+
+
+def checkIllustration(info):
+    if Illustration not in info.keys():
+        info[Illustration] = None
+    else:
+        info[Illustration] = info[Illustration][0]
+
+
+def checkMusic(info):
+    if Music not in info.keys():
+        info[Music] = None
+    else:
+        info[Music] = info[Music][0]
+
+
+def checkAgeSpecification(info):
+    if AgeSpecification not in info.keys():
+        info[AgeSpecification] = 'unknown'
+    elif "18" in info[AgeSpecification]:
+        info[AgeSpecification] = "r18"
+    elif "全" in info[AgeSpecification]:
+        info[AgeSpecification] = "all"
+    else:
+        info[AgeSpecification] = 'unknown'
+
+
+def checkFileCapacity(info):
+    if FileCapacity not in info.keys():
+        info[FileCapacity] = None
+    elif 'G' in info[FileCapacity][0]:
+        info[FileCapacity] = float(re.sub(r'[^0-9.]', '', info[FileCapacity][0])) * 1024
+    else:
+        info[FileCapacity] = float(re.sub(r'[^0-9.]', '', info[FileCapacity][0]))
+
+
+def checkWorkFormat(info):
+    if WorkFormat not in info.keys() or info[WorkFormat] is None:
+        info[WorkFormat] = None
+    else:
+        info[WorkFormat] = info[WorkFormat][0]
+    checkSocieties(info)
+
+
+def checkSocieties(info):
+    if Societies not in info.keys():
+        info[Societies] = None
+
+
+def get_info(name):
+    if Global.get_value('SqlConnection').search(name):
+        # 已经存在的作品, 非特殊输出格式
+        print('%s' % name, end=',')
+        return None
+
+    get_url(name)
+
+    global info
+    update_data = {
+        'ID': info.get('idx'),
+        'URL': info.get('url'),
+        'Name': info.get('name'),
+        'SellDay': info.get(SellDay),
+        'SeriesName': info.get(SeriesName),
+        'Author': info.get(Author),
+        'Scenario': info.get(Scenario),
+        'Illustration': info.get(Illustration),
+        'Music': info.get(Music),
+        'AgeSpecification': info.get(AgeSpecification),
+        'WorkFormat': info.get(WorkFormat),
+        'FileCapacity': info.get(FileCapacity),
+        'Societies': info.get(Societies)
+    }
+
+    try:
+        Global.get_value('SqlConnection').insert('dlsite', update_data)
+        pass
+    except MySQLdb.connections.Error:
+        Global.get_value('dataBase').rollback()  # 发生错误时回滚
+
+
+def get_url(name):
+    for header in headers:
+        url = header.format(name)
+        from_net_get(name, url)
+
+
+def from_net_get(name, url):
+    global info
+    for _i in range(3):  # 开始获取 尝试三次访问, 超时设定4秒
         try:
-            response = requests.get(url, timeout=4)
+            response = requests.get(url, timeout=3)
             response.encoding = 'utf-8'
             html = response.text
             soup = BeautifulSoup(html, features='html.parser')
@@ -45,20 +148,20 @@ def from_net_get(FileName):
             print('no network !!')
             return None
         if _i == 2:
-            print('get info', FileName, 'error')
+            print('get info', name, 'error')
             return None
 
     company_item = soup.find('div', class_="error_box_inner")
     if company_item is not None:
         # 没有被贩卖的作品, 或者属于别的分区
-        print('\033[1;37;40m\033[37m%s\033[0m\033[0m' % FileName, end=',')
+        print('\033[1;37;40m\033[37m%s\033[0m\033[0m' % name, end=',')
         return None
     else:
         # 这次运行过程中, 自动寻找的作品
-        print('\033[4;36m%s\033[0m' % FileName, end=', ')
+        print('\033[4;36m%s\033[0m' % name, end=', ')
 
     temp = etree.HTML(html).xpath('//span[@class="maker_name"]/a')[0].xpath('string(.)')
-    info = {'idx': FileName, 'name': soup.find('h1', id='work_name').text, 'url': url,
+    info = {'idx': name, 'name': soup.find('h1', id='work_name').text, 'url': url,
             Societies: temp}
     # 遍历所有<a>以及<div>，将其替换为<span>
 
@@ -97,122 +200,13 @@ def from_net_get(FileName):
                     temp = temp.replace('\n', '')
                     temp = temp.replace(' ', '')
                     info[header.text].append(temp)
-    if SeriesName not in info.keys():
-        info[SeriesName] = None
-    else:
-        info[SeriesName] = info[SeriesName][0]
-    if SellDay not in info.keys():
-        info[SellDay] = None
-    else:
-        info[SellDay] = re.sub(r'[^0-9]', '', info[SellDay][0])
-    if Author not in info.keys():
-        info[Author] = None
-    else:
-        info[Author] = info[Author][0]
-    if Scenario not in info.keys():
-        info[Scenario] = None
-    else:
-        info[Scenario] = info[Scenario][0]
-    if Illustration not in info.keys():
-        info[Illustration] = None
-    else:
-        info[Illustration] = info[Illustration][0]
-    if Music not in info.keys():
-        info[Music] = None
-    else:
-        info[Music] = info[Music][0]
-    if AgeSpecification not in info.keys():
-        info[AgeSpecification] = 'unknown'
-    elif "18" in info[AgeSpecification]:
-        info[AgeSpecification] = "r18"
-    elif "全" in info[AgeSpecification]:
-        info[AgeSpecification] = "all"
-    else:
-        info[AgeSpecification] = 'unknown'
-    if FileCapacity not in info.keys():
-        info[FileCapacity] = None
-    elif 'G' in info[FileCapacity][0]:
-        info[FileCapacity] = float(re.sub(r'[^0-9.]', '', info[FileCapacity][0])) * 1024
-    else:
-        info[FileCapacity] = float(re.sub(r'[^0-9.]', '', info[FileCapacity][0]))
-    if WorkFormat not in info.keys() or info[WorkFormat] is None:
-        info[WorkFormat] = None
-    else:
-        info[WorkFormat] = info[WorkFormat][0]
-    if Societies not in info.keys():
-        info[Societies] = None
 
-
-def get_info(idx):
-    if Global.get_value('SqlConnection').search(idx):
-        # 已经存在的作品, 非特殊输出格式
-        print('%s' % idx, end=',')
-        return None
-
-    from_net_get(idx)
-    global info
-    update_data = [
-        ('URL', url),
-        ('Name', info['name']),
-        ('SellDay', info[SellDay]),
-        ('SeriesName', info[SeriesName]),
-        ('Author', info[Author]),
-        ('Scenario', info[Scenario]),
-        ('Illustration', info[Illustration]),
-        ('Music', info[Music]),
-        ('AgeSpecification', info[AgeSpecification]),
-        ('WorkFormat', info[WorkFormat]),
-        ('FileCapacity', info[FileCapacity]),
-        ('Societies', info[Societies])
-    ]
-    update_query = "update dlsite set {} WHERE ID=%s;".format(
-        ', '.join([f"{col}=%s" for col, val in update_data if val is not None])
-    )
-    print(update_query)
-    try:
-        pass
-        #
-        # cursor.execute(update_query, tuple(val for col, val in update_data if val is not None) + (info['idx'],))
-        #
-        # cursor.execute("insert into dlsite (ID) value ('" + info['idx'] + "');")
-        # cursor.execute("update dlsite set %s='%s' WHERE ID='%s';" % ('URL', url, info['idx']))
-        # if info['name'] is not None:
-        #     cursor.execute("update dlsite set %s='%s' WHERE ID='%s';" % ('Name', info['name'], info['idx']))
-        # if info[SellDay] is not None:
-        #     cursor.execute("update dlsite set %s='%s' WHERE ID='%s';" % ('SellDay', info[SellDay], info['idx']))
-        # if info[SeriesName] is not None:
-        #     cursor.execute("update dlsite set %s='%s' WHERE ID='%s';" % ('SeriesName', info[SeriesName], info['idx']))
-        # if info[Author] is not None:
-        #     cursor.execute("update dlsite set %s='%s' WHERE ID='%s';" % ('Author', info[Author], info['idx']))
-        # if info[Scenario] is not None:
-        #     cursor.execute("update dlsite set %s='%s' WHERE ID='%s';" % ('Scenario', info[Scenario], info['idx']))
-        # if info[Illustration] is not None:
-        #     cursor.execute(
-        #         "update dlsite set %s='%s' WHERE ID='%s';" % ('Illustration', info[Illustration], info['idx']))
-        # if info[Music] is not None:
-        #     cursor.execute("update dlsite set %s='%s' WHERE ID='%s';" % ('Music', info[Music], info['idx']))
-        # if info[AgeSpecification] is not None:
-        #     cursor.execute(
-        #         "update dlsite set %s='%s' WHERE ID='%s';" % ('AgeSpecification', info[AgeSpecification], info['idx']))
-        # if info[WorkFormat] is not None:
-        #     cursor.execute("update dlsite set %s='%s' WHERE ID='%s';" % ('WorkFormat', info[WorkFormat], info['idx']))
-        # if info[FileCapacity] is not None:
-        #     cursor.execute(
-        #         "update dlsite set %s='%s' WHERE ID='%s';" % ('FileCapacity', info[FileCapacity], info['idx']))
-        # if info[Societies] is not None:
-        #     cursor.execute("update dlsite set %s='%s' WHERE ID='%s';" % ('Societies', info[Societies], info['idx']))
-        # if '声優' in info.keys():
-        #     for i in info['声優']:
-        #         cursor.execute("insert into cv value('%s', '%s')" % (info['idx'], i))
-        # if 'ジャンル' in info.keys():
-        #     for i in info['ジャンル']:
-        #         cursor.execute("insert into tag value('%s', '%s')" % (info['idx'], i))
-        # Global.get_value('dataBase').commit()
-    except MySQLdb.connections.Error:
-        Global.get_value('dataBase').rollback()  # 发生错误时回滚
-
-    # 输出日志
-    # datetime_now = str(datetime.now())
-    # with open(config['data_path'] + '/logger.data', 'a', encoding='utf-8') as file:
-    #     logger = datetime_now + ':' + idx + '\n'
-    #     file.write(logger)
+    checkSeriesName(info)  # 判断是否属于某个作品系列
+    checkSellDay(info)  # 获取作品的发售日期
+    checkAuthor(info)  # 获取作品的作者
+    checkScenario(info)
+    checkIllustration(info)
+    checkMusic(info)  # 获取作品的音乐
+    checkAgeSpecification(info)  # 获取作品的年龄分级
+    checkFileCapacity(info)  # 获取作品的文件大小
+    checkWorkFormat(info)  # 获取作品的文件格式

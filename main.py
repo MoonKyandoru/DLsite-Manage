@@ -2,6 +2,8 @@ import MySQLdb
 
 from src import Global
 from src import network
+from src import spider
+
 
 # 初始化设定
 def init():
@@ -17,7 +19,9 @@ def init():
 def main():
     if init() is None:
         return None
-    network.get_info("RJ273058")
+    filelist = Global.get_value('FileList')
+    for i in filelist:
+        network.get_info(i)
 
 
 if '__main__' == __name__:
