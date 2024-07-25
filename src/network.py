@@ -7,6 +7,10 @@ from bs4 import BeautifulSoup
 from lxml import etree
 from src import Global
 
+error_dict = {1: 'network error',
+              2: 'get information error',
+              3: "can't get information"
+              }
 SellDay = '販売日'
 SeriesName = 'シリーズ名'
 Author = '作者'
@@ -95,17 +99,37 @@ def checkSocieties(info):
         info[Societies] = None
 
 
-def get_info(name):
+def replaceToSpan(soup):  # 遍历所有<a>以及<div>，将其替换为<span>
+    links = soup.find_all('a')
+    for link in links:
+        new_div = soup.new_tag('span')
+        if link.string is not None:
+            new_div.string = link.string
+            link.replace_with(new_div)
+    links = soup.find_all('div')
+    for link in links:
+        new_div = soup.new_tag('span')
+        if link.string is not None:
+            new_div.string = link.string
+            link.replace_with(new_div)
+    return soup
+
+
+def addToDataBase(name):
     if Global.get_value('SqlConnection').search(name):
         # 已经存在的作品, 非特殊输出格式
-        print('%s' % name, end=',')
+        # print('%s' % name, end=',')
         return None
 
-    get_url(name)
+    info = get_url(name)
+    if isinstance(info, int):
+        print(error_dict[info])
+        if info == 3:
+            print(name, end=',')
+        return None
 
-    global info
     update_data = {
-        'ID': info.get('idx'),
+        'ID': info.get('ID'),
         'URL': info.get('url'),
         'Name': info.get('name'),
         'SellDay': info.get(SellDay),
@@ -127,73 +151,59 @@ def get_info(name):
         Global.get_value('dataBase').rollback()  # 发生错误时回滚
 
 
-def get_url(name):
+def get_url(name):  # 遍历查找正确的url
     for header in headers:
         url = header.format(name)
-        from_net_get(name, url)
+        res = from_net_get(name, url)
+        if isinstance(res, int):
+            continue
+        return res
+    return 3
+    # print('未找到此作品')
 
 
-def from_net_get(name, url):
-    global info
-    for _i in range(3):  # 开始获取 尝试三次访问, 超时设定4秒
+def netTryConn(url):  # 尝试三次访问, 超时设定4秒
+    for _i in range(3):
         try:
             response = requests.get(url, timeout=3)
             response.encoding = 'utf-8'
             html = response.text
             soup = BeautifulSoup(html, features='html.parser')
-            break
+            return soup
         except requests.Timeout:
             pass
         except requests.exceptions.SSLError:
-            print('no network !!')
-            return None
-        if _i == 2:
-            print('get info', name, 'error')
-            return None
+            return 1
+    return 2
 
-    company_item = soup.find('div', class_="error_box_inner")
-    if company_item is not None:
-        # 没有被贩卖的作品, 或者属于别的分区
-        print('\033[1;37;40m\033[37m%s\033[0m\033[0m' % name, end=',')
-        return None
+
+def from_net_get(ID, url):
+    soup = netTryConn(url)
+    if isinstance(soup, int):
+        return soup
+
+    if soup.find('div', class_="error_box_inner") is not None:
+        pass  # 没有被贩卖的作品, 或者属于别的分区
     else:
-        # 这次运行过程中, 自动寻找的作品
-        print('\033[4;36m%s\033[0m' % name, end=', ')
-
-    temp = etree.HTML(html).xpath('//span[@class="maker_name"]/a')[0].xpath('string(.)')
-    info = {'idx': name, 'name': soup.find('h1', id='work_name').text, 'url': url,
-            Societies: temp}
-    # 遍历所有<a>以及<div>，将其替换为<span>
-
-    links = soup.find_all('a')
-    for link in links:
-        new_div = soup.new_tag('span')
-        if link.string is not None:
-            new_div.string = link.string
-            link.replace_with(new_div)
-    links = soup.find_all('div')
-    for link in links:
-        new_div = soup.new_tag('span')
-        if link.string is not None:
-            new_div.string = link.string
-            link.replace_with(new_div)
-
-    # 定位信息框
-    soup = soup.find('table', id='work_outline')
+        pass  # 这次运行过程中, 自动寻找的作品
+    if soup.find('h1', id='work_name') is None:
+        return 3
+    info = {'ID': ID,
+            'url': url,
+            'name': soup.find('h1', id='work_name').text,
+            Societies: soup.find('span', class_='maker_name').get_text()
+            }
+    soup = replaceToSpan(soup)
+    soup = soup.find('table', id='work_outline')  # 定位信息框
 
     # 处理相关信息
-
     rows = soup.find_all('tr')
     for row in rows:
 
-        # 找到当前行中的所有表头单元格（th)
-
-        for header in row.find_all('th'):
+        for header in row.find_all('th'):  # 找到当前行中的所有表头单元格（th)
             info[header.text] = []
 
-            # 找到当前行中的所有数据单元格（td）
-
-            for cell in row.find_all('td'):
+            for cell in row.find_all('td'):  # 找到当前行中的所有数据单元格（td）
                 for i in cell.find_all('span'):
                     temp = i.text
                     temp = str(temp)
@@ -201,7 +211,7 @@ def from_net_get(name, url):
                     temp = temp.replace(' ', '')
                     info[header.text].append(temp)
 
-    checkSeriesName(info)  # 判断是否属于某个作品系列
+    checkSeriesName(info)  # 获取是否属于某个作品系列
     checkSellDay(info)  # 获取作品的发售日期
     checkAuthor(info)  # 获取作品的作者
     checkScenario(info)
@@ -210,3 +220,5 @@ def from_net_get(name, url):
     checkAgeSpecification(info)  # 获取作品的年龄分级
     checkFileCapacity(info)  # 获取作品的文件大小
     checkWorkFormat(info)  # 获取作品的文件格式
+
+    return info

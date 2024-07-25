@@ -21,7 +21,7 @@ def main():
         return None
     filelist = Global.get_value('FileList')
     for i in filelist:
-        network.get_info(i)
+        network.addToDataBase(i)
 
 
 if '__main__' == __name__:
